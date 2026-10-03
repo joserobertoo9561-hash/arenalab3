@@ -1,0 +1,70 @@
+name: Build ArenaLab 0.3 APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'ArenaLab_03_GitHub_Source.zip'
+      - '.github/workflows/build.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Extract source
+        run: |
+          rm -rf work
+          mkdir work
+          unzip -q ArenaLab_03_GitHub_Source.zip -d work
+
+      - name: Build APK
+        working-directory: work/arena-lab
+        run: python3 build_apk.py
+
+      - name: Verify output
+        run: |
+          test -f work/deliverables/ArenaLab_03_Experimental.apk
+          cat work/deliverables/ArenaLab_SHA256.txt
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ArenaLab-03-Experimental
+          path: |
+            work/deliverables/ArenaLab_03_Experimental.apk
+            work/deliverables/ArenaLab_SHA256.txt
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v0.3-experimental"
+
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --title "ArenaLab 0.3 Experimental" \
+              --notes "ArenaLab 0.3 experimental Android build."
+          fi
+
+          gh release upload "$TAG" \
+            work/deliverables/ArenaLab_03_Experimental.apk \
+            work/deliverables/ArenaLab_SHA256.txt \
+            --clobber
